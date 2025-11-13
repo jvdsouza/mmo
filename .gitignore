@@ -1,0 +1,32 @@
+# Go
+server/mmo-server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Godot
+client/.godot/
+client/.import/
+client/export.cfg
+client/export_presets.cfg
+client/*.translation
+client/mono_crash.*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
