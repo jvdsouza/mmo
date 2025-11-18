@@ -36,6 +36,10 @@ var is_dead: bool = false
 var targeting_system: RaycastTargeting = null
 var weapon: MeleeWeapon = null
 
+# UI system - Extensible theme architecture
+var ui_theme: UITheme = null
+@export_enum("Minimal", "MMO") var preferred_ui_theme: String = "Minimal"
+
 # Get the gravity from the project settings
 var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 
@@ -79,6 +83,9 @@ func _ready():
 		# Connect weapon signals to animations
 		weapon.attack_started.connect(_on_weapon_attack_started)
 		weapon.attack_completed.connect(_on_weapon_attack_completed)
+
+		# Setup UI theme
+		_initialize_ui_theme()
 
 	# Setup camera and UI
 	if is_local_player:
@@ -401,3 +408,63 @@ func get_visual_node() -> Node3D:
 
 func is_alive() -> bool:
 	return not is_dead
+
+# ============================================================================
+# UI SYSTEM METHODS
+# ============================================================================
+
+func _initialize_ui_theme():
+	"""Initialize UI theme based on preference"""
+	# Get UI container
+	var ui_container = get_node_or_null("UI")
+	if not ui_container:
+		print("[Player] No UI container found")
+		return
+
+	# Create theme based on preference
+	match preferred_ui_theme:
+		"Minimal":
+			ui_theme = MinimalTheme.new()
+		"MMO":
+			ui_theme = MMOTheme.new()
+		_:
+			ui_theme = MinimalTheme.new()  # Default
+
+	# Add theme to UI container
+	ui_container.add_child(ui_theme)
+
+	# Initialize theme with game systems
+	ui_theme.initialize(self, targeting_system, weapon)
+
+	print("[Player] UI Theme initialized: ", ui_theme.theme_name)
+
+func switch_ui_theme(theme_name: String):
+	"""Switch to a different UI theme at runtime"""
+	if not is_local_player:
+		return
+
+	var ui_container = get_node_or_null("UI")
+	if not ui_container:
+		return
+
+	# Cleanup old theme
+	if ui_theme:
+		ui_theme.cleanup()
+		ui_theme.queue_free()
+		ui_theme = null
+
+	# Create new theme
+	preferred_ui_theme = theme_name
+	match theme_name:
+		"Minimal":
+			ui_theme = MinimalTheme.new()
+		"MMO":
+			ui_theme = MMOTheme.new()
+		_:
+			ui_theme = MinimalTheme.new()
+
+	# Add and initialize new theme
+	ui_container.add_child(ui_theme)
+	ui_theme.initialize(self, targeting_system, weapon)
+
+	print("[Player] Switched to UI theme: ", ui_theme.theme_name)
