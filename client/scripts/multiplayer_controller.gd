@@ -1,10 +1,12 @@
 extends Node3D
 
-# Player scene to instantiate
+# Scenes to instantiate
 @export var player_scene: PackedScene
+@export var monster_scene: PackedScene
 
-# Track spawned players
+# Track spawned entities
 var spawned_players = {}
+var spawned_monsters = {}
 var local_player = null
 var local_player_id = ""
 
@@ -48,7 +50,9 @@ func spawn_remote_player(id: String, pos: Vector3, rot: Vector3):
 
 	print("Remote player spawned: ", id)
 
-func _on_world_state_received(players: Array):
+func _on_world_state_received(world_data: Dictionary):
+	# Handle players
+	var players = world_data.get("players", [])
 	for player_data in players:
 		var id = player_data.get("id", "")
 		var pos_data = player_data.get("position", {})
@@ -85,3 +89,52 @@ func _on_world_state_received(players: Array):
 			print("Removing disconnected player: ", id)
 			spawned_players[id].queue_free()
 			spawned_players.erase(id)
+
+	# Handle monsters
+	var monsters = world_data.get("monsters", [])
+	for monster_data in monsters:
+		var id = monster_data.get("id", "")
+		var name = monster_data.get("name", "Monster")
+		var pos_data = monster_data.get("position", {})
+		var health = monster_data.get("health", 100)
+		var max_health = monster_data.get("max_health", 100)
+
+		var pos = Vector3(
+			pos_data.get("x", 0),
+			pos_data.get("y", 0),
+			pos_data.get("z", 0)
+		)
+
+		# Update or spawn monster
+		if spawned_monsters.has(id):
+			spawned_monsters[id].update_from_server(pos, health, max_health)
+		else:
+			spawn_monster(id, name, pos, health, max_health)
+
+	# Remove dead/despawned monsters
+	var current_monster_ids = []
+	for monster_data in monsters:
+		current_monster_ids.append(monster_data.get("id", ""))
+
+	for id in spawned_monsters.keys():
+		if id not in current_monster_ids:
+			print("Removing despawned monster: ", id)
+			spawned_monsters[id].queue_free()
+			spawned_monsters.erase(id)
+
+func spawn_monster(id: String, name: String, pos: Vector3, health: int, max_hp: int):
+	if monster_scene == null:
+		print("Warning: Monster scene not assigned!")
+		return
+
+	var monster = monster_scene.instantiate()
+	monster.entity_id = id
+	monster.monster_name = name
+	monster.current_health = health
+	monster.max_health = max_hp
+	monster.position = pos
+	monster.name = "Monster_" + id
+	add_child(monster)
+	spawned_monsters[id] = monster
+
+	print("Monster spawned: ", id, " (", name, ")")

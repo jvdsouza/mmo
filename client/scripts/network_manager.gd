@@ -80,9 +80,9 @@ func handle_connect(data: Dictionary):
 		connection_established.emit(player_id)
 
 func handle_world_state(data: Dictionary):
-	if data.has("data") and data["data"].has("players"):
-		var players = data["data"]["players"]
-		world_state_received.emit(players)
+	if data.has("data"):
+		var world_data = data["data"]
+		world_state_received.emit(world_data)
 
 func handle_combat_event(data: Dictionary):
 	if data.has("data"):
@@ -117,6 +117,61 @@ func send_position(position: Vector3, rotation: Vector3):
 				"y": rotation.y,
 				"z": rotation.z
 			}
+		}
+	}
+
+	var json_string = JSON.stringify(message)
+	socket.send_text(json_string)
+
+func send_attack(target_id: String, ability_id: String = "basic_attack"):
+	if not connected:
+		print("[NetworkManager] Cannot attack - not connected to server")
+		return
+
+	if target_id == "":
+		print("[NetworkManager] Cannot attack - no target")
+		return
+
+	var message = {
+		"type": "attack",
+		"player_id": player_id,
+		"data": {
+			"target_id": target_id,
+			"ability_id": ability_id
+		}
+	}
+
+	var json_string = JSON.stringify(message)
+	socket.send_text(json_string)
+	print("[NetworkManager] Sent attack: ", target_id, " with ", ability_id)
+
+func send_ability(target_id: String, ability_id: String):
+	if not connected:
+		print("[NetworkManager] Cannot use ability - not connected to server")
+		return
+
+	var message = {
+		"type": "ability",
+		"player_id": player_id,
+		"data": {
+			"target_id": target_id,
+			"ability_id": ability_id
+		}
+	}
+
+	var json_string = JSON.stringify(message)
+	socket.send_text(json_string)
+	print("[NetworkManager] Sent ability: ", ability_id, " on ", target_id)
+
+func send_chat(message_text: String):
+	if not connected:
+		return
+
+	var message = {
+		"type": "chat",
+		"player_id": player_id,
+		"data": {
+			"message": message_text
 		}
 	}
 

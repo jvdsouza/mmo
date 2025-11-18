@@ -12,6 +12,7 @@ extends CharacterBody3D
 # Camera
 @onready var camera_pivot = $CameraPivot
 @onready var camera = $CameraPivot/Camera3D
+@onready var reticle = $UI/Reticle
 
 # Animation (optional - will be null if no AnimationTree exists)
 @onready var animation_tree: AnimationTree = get_node_or_null("AnimationTree")
@@ -31,6 +32,12 @@ var current_speed: float = 0.0
 var is_attacking: bool = false
 var is_dead: bool = false
 
+# Combat/targeting
+var current_target: Node3D = null
+var attack_range: float = 3.0  # Melee range
+var attack_cooldown: float = 0.0
+var attack_cooldown_time: float = 1.0  # 1 second between attacks
+
 # Get the gravity from the project settings
 var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 
@@ -49,14 +56,20 @@ func _ready():
 		CombatEventManager.register_entity(entity_id, self)
 		print("[Player] Registered with CombatEventManager: ", entity_id)
 
-	# Setup camera
+	# Setup camera and UI
 	if is_local_player:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		camera.current = true
+
+		# Connect reticle to player
+		if reticle:
+			reticle.player = self
 	else:
-		# Disable camera for remote players
+		# Disable camera and UI for remote players
 		if camera_pivot:
 			camera_pivot.queue_free()
+		if reticle:
+			reticle.queue_free()
 
 func _exit_tree():
 	# Unregister from combat system
@@ -72,6 +85,11 @@ func _input(event):
 		camera_pivot.rotate_x(-event.relative.y * mouse_sensitivity)
 		camera_pivot.rotation.x = clamp(camera_pivot.rotation.x, -PI/2, PI/2)
 
+	# Primary attack (left click)
+	if event.is_action_pressed("primary_attack"):
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			attempt_attack()
+
 	# Toggle mouse capture
 	if event.is_action_pressed("ui_cancel"):
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -83,12 +101,19 @@ func _physics_process(delta):
 	if is_dead:
 		return
 
+	# Update attack cooldown
+	if attack_cooldown > 0:
+		attack_cooldown -= delta
+
 	if is_local_player:
 		handle_local_movement(delta)
 
 		# Update animation based on movement
 		current_speed = velocity.length()
 		update_movement_animation()
+
+		# Update target detection (raycast from camera)
+		update_target_detection()
 
 		# Send position to server if changed significantly
 		if position.distance_to(last_position) > 0.01 or rotation.distance_to(last_rotation) > 0.01:
@@ -269,6 +294,108 @@ func shake_camera(intensity: float, is_critical: bool):
 		await get_tree().create_timer(0.02).timeout
 
 	camera_pivot.position = original_pos
+
+# ============================================================================
+# COMBAT / TARGETING METHODS
+# ============================================================================
+
+func update_target_detection():
+	"""Continuously raycast from camera to detect potential targets"""
+	if not camera:
+		return
+
+	var space_state = get_world_3d().direct_space_state
+	var camera_pos = camera.global_position
+	var camera_forward = -camera.global_transform.basis.z
+	var ray_distance = attack_range * 2  # Check further than attack range for UI feedback
+
+	# Create raycast query
+	var query = PhysicsRayQueryParameters3D.create(
+		camera_pos,
+		camera_pos + camera_forward * ray_distance
+	)
+	query.exclude = [self]  # Don't hit yourself
+
+	var result = space_state.intersect_ray(query)
+
+	if result:
+		var collider = result.collider
+
+		# Check if it's an attackable entity (has entity_id)
+		if collider.has_method("get") and collider.get("entity_id"):
+			current_target = collider
+		else:
+			current_target = null
+	else:
+		current_target = null
+
+func attempt_attack():
+	"""Try to attack the current target"""
+	# Check cooldown
+	if attack_cooldown > 0:
+		print("[Player] Attack on cooldown: ", attack_cooldown)
+		return
+
+	# Check if already attacking
+	if is_attacking:
+		print("[Player] Already attacking")
+		return
+
+	# Get target from raycast
+	var target = get_raycast_target()
+
+	if not target:
+		print("[Player] No target in range")
+		return
+
+	var target_entity_id = target.get("entity_id")
+	if not target_entity_id or target_entity_id == "":
+		print("[Player] Target has no entity_id")
+		return
+
+	# Check range
+	var distance = global_position.distance_to(target.global_position)
+	if distance > attack_range:
+		print("[Player] Target out of range: ", distance, " > ", attack_range)
+		return
+
+	# Send attack to server
+	print("[Player] Attacking: ", target_entity_id, " at distance: ", distance)
+	if NetworkManager:
+		NetworkManager.send_attack(target_entity_id)
+
+	# Start attack cooldown
+	attack_cooldown = attack_cooldown_time
+
+	# Play local attack animation prediction (server will confirm)
+	play_attack("swing_right", target.global_position, {})
+
+func get_raycast_target() -> Node3D:
+	"""Perform raycast from camera and return the target if valid"""
+	if not camera:
+		return null
+
+	var space_state = get_world_3d().direct_space_state
+	var camera_pos = camera.global_position
+	var camera_forward = -camera.global_transform.basis.z
+
+	# Create raycast query
+	var query = PhysicsRayQueryParameters3D.create(
+		camera_pos,
+		camera_pos + camera_forward * attack_range
+	)
+	query.exclude = [self]  # Don't hit yourself
+
+	var result = space_state.intersect_ray(query)
+
+	if result:
+		var collider = result.collider
+
+		# Check if it's an attackable entity
+		if collider.has_method("get") and collider.get("entity_id"):
+			return collider
+
+	return null
 
 # ============================================================================
 # UTILITY METHODS
