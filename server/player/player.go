@@ -19,6 +19,8 @@ type Player struct {
 
 	// Combat
 	CooldownManager *combat.CooldownManager
+	PvPEnabled      bool
+	Stunned         bool
 }
 
 // NewPlayer creates a new player with default stats
@@ -84,20 +86,12 @@ func (p *Player) GetCooldownManager() *combat.CooldownManager {
 	return p.CooldownManager
 }
 
-func (p *Player) TakeDamage(amount int) {
-	p.Stats.ModifyCurrentValue(stats.StatHealth, float64(-amount))
-
-	// Clamp health to 0
-	if p.Stats.GetStat(stats.StatHealth) < 0 {
-		p.Stats.SetBaseStat(stats.StatHealth, 0)
-	}
-
-	// Recalculate stats (for conditional modifiers like Berserker Rage)
-	p.Stats.RecalculateAll()
-}
-
 func (p *Player) IsAlive() bool {
 	return p.Stats.GetStat(stats.StatHealth) > 0
+}
+
+func (p *Player) CanTakeDamage() bool {
+	return p.IsAlive()
 }
 
 // Heal restores health
@@ -178,4 +172,108 @@ func (p *Player) Update(deltaTime float64) {
 
 	// TODO: Add resource regeneration
 	// TODO: Add status effect ticking (poison, etc.)
+}
+
+// =============================================================================
+// CombatEntity Interface Implementation
+// =============================================================================
+
+// GetType returns the entity type
+func (p *Player) GetType() combat.EntityType {
+	return combat.EntityTypePlayer
+}
+
+// GetFaction returns the player's faction
+func (p *Player) GetFaction() combat.Faction {
+	return combat.FactionPlayer
+}
+
+// CanDealDamage checks if player can attack
+func (p *Player) CanDealDamage() bool {
+	return p.IsAlive() && !p.Stunned
+}
+
+// IsHostileTo checks if player is hostile to another entity
+func (p *Player) IsHostileTo(other combat.CombatEntity) bool {
+	switch other.GetType() {
+	case combat.EntityTypeMonster, combat.EntityTypeBoss:
+		return true // Always hostile to monsters
+	case combat.EntityTypeDestructible, combat.EntityTypeHarvestable:
+		return true // Can attack objects
+	case combat.EntityTypePlayer:
+		// PvP check
+		otherPlayer, ok := other.(*Player)
+		if !ok {
+			return false
+		}
+		return p.PvPEnabled && otherPlayer.PvPEnabled
+	default:
+		return false
+	}
+}
+
+// IsValidTarget checks if this player can be targeted by attacker
+func (p *Player) IsValidTarget(attacker combat.CombatEntity) bool {
+	// Players can be targeted by anyone hostile
+	return attacker.IsHostileTo(p)
+}
+
+// TakeDamage applies damage to the player
+func (p *Player) TakeDamage(amount int, source combat.CombatEntity) *combat.DamageResult {
+	// Apply damage
+	p.Stats.ModifyCurrentValue(stats.StatHealth, float64(-amount))
+
+	// Clamp to 0
+	if p.Stats.GetStat(stats.StatHealth) < 0 {
+		p.Stats.ModifyCurrentValue(stats.StatHealth, -p.Stats.GetStat(stats.StatHealth))
+	}
+
+	newHealth := int(p.Stats.GetStat(stats.StatHealth))
+	maxHealth := int(p.Stats.GetStat(stats.StatMaxHealth))
+
+	// Check death
+	died := newHealth <= 0
+	if died {
+		p.OnDeath(source)
+	}
+
+	// Recalculate stats (for conditional modifiers like Berserker Rage)
+	p.Stats.RecalculateAll()
+
+	return &combat.DamageResult{
+		TargetID:    p.ID,
+		Damage:      amount,
+		RemainingHP: newHealth,
+		MaxHP:       maxHealth,
+		Died:        died,
+	}
+}
+
+// OnDeath handles player death
+func (p *Player) OnDeath(killer combat.CombatEntity) {
+	// TODO: Implement death logic
+	// - Drop items
+	// - Award XP to killer
+	// - Respawn timer
+	// - Death penalties
+}
+
+// GetInterestRadius returns how far this entity can be seen
+func (p *Player) GetInterestRadius() float64 {
+	return 50.0 // Players visible from 50 meters
+}
+
+// ShouldBroadcastCombat returns whether combat involving this entity should be broadcast
+func (p *Player) ShouldBroadcastCombat() bool {
+	return true // Always broadcast player combat
+}
+
+// IsPvPEnabled returns whether this player can engage in PvP
+func (p *Player) IsPvPEnabled() bool {
+	return p.PvPEnabled
+}
+
+// IsStunned returns whether the player is stunned
+func (p *Player) IsStunned() bool {
+	return p.Stunned
 }

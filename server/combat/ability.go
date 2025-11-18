@@ -89,6 +89,19 @@ func (v Vector3) Distance(other Vector3) float64 {
 	return sqrt(dx*dx + dy*dy + dz*dz)
 }
 
+// Normalize returns a unit vector in the same direction
+func (v Vector3) Normalize() Vector3 {
+	length := sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+	if length == 0 {
+		return Vector3{X: 0, Y: 0, Z: 0}
+	}
+	return Vector3{
+		X: v.X / length,
+		Y: v.Y / length,
+		Z: v.Z / length,
+	}
+}
+
 func sqrt(x float64) float64 {
 	// Simple approximation - in production use math.Sqrt
 	if x == 0 {
@@ -161,6 +174,11 @@ func (cm *CooldownManager) IsReady(abilityID string) bool {
 	return time.Now().After(expiry)
 }
 
+// IsOnCooldown checks if an ability is currently on cooldown
+func (cm *CooldownManager) IsOnCooldown(abilityID string) bool {
+	return !cm.IsReady(abilityID)
+}
+
 // SetCooldown sets the cooldown for an ability
 func (cm *CooldownManager) SetCooldown(abilityID string, duration time.Duration) {
 	cm.cooldowns[abilityID] = time.Now().Add(duration)
@@ -177,4 +195,37 @@ func (cm *CooldownManager) GetRemaining(abilityID string) time.Duration {
 		return 0
 	}
 	return remaining
+}
+
+// AbilityRegistry stores all registered abilities
+type AbilityRegistry struct {
+	abilities map[string]Ability
+}
+
+// NewAbilityRegistry creates a new ability registry
+func NewAbilityRegistry() *AbilityRegistry {
+	return &AbilityRegistry{
+		abilities: make(map[string]Ability),
+	}
+}
+
+// Register adds an ability to the registry
+func (ar *AbilityRegistry) Register(id string, ability Ability) {
+	ar.abilities[id] = ability
+}
+
+// Get retrieves an ability by ID
+func (ar *AbilityRegistry) Get(id string) Ability {
+	return ar.abilities[id]
+}
+
+// Has checks if an ability exists
+func (ar *AbilityRegistry) Has(id string) bool {
+	_, exists := ar.abilities[id]
+	return exists
+}
+
+// GetAll returns all registered abilities
+func (ar *AbilityRegistry) GetAll() map[string]Ability {
+	return ar.abilities
 }
