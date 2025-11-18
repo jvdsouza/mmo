@@ -62,10 +62,14 @@ func handle_server_message(packet: PackedByteArray):
 	var msg_type = data.get("type", "")
 
 	match msg_type:
-		"connect":
+		"welcome":
 			handle_connect(data)
 		"world_state":
 			handle_world_state(data)
+		"combat_event":
+			handle_combat_event(data)
+		"combat_events_batch":
+			handle_combat_batch(data)
 		_:
 			print("Unknown message type: ", msg_type)
 
@@ -79,6 +83,21 @@ func handle_world_state(data: Dictionary):
 	if data.has("data") and data["data"].has("players"):
 		var players = data["data"]["players"]
 		world_state_received.emit(players)
+
+func handle_combat_event(data: Dictionary):
+	if data.has("data"):
+		var event = data["data"]
+		# Forward to CombatEventManager
+		if CombatEventManager:
+			CombatEventManager.handle_combat_event(event)
+
+func handle_combat_batch(data: Dictionary):
+	if data.has("data") and data["data"].has("events"):
+		var events = data["data"]["events"]
+		# Forward each event to CombatEventManager
+		if CombatEventManager:
+			for event in events:
+				CombatEventManager.handle_combat_event(event)
 
 func send_position(position: Vector3, rotation: Vector3):
 	if not connected:
