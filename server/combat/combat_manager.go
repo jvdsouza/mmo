@@ -16,6 +16,9 @@ type CombatManager struct {
 	abilityRegistry *AbilityRegistry
 	validatorChain  *ValidatorChain
 
+	// Event Broadcasting (for animations)
+	eventBroadcaster *EventBroadcaster
+
 	// Configuration
 	config *CombatConfig
 
@@ -56,10 +59,20 @@ func NewCombatManager(config *CombatConfig) *CombatManager {
 		config:          config,
 	}
 
+	// Event broadcaster will be set via SetBroadcastCallback
+	// (allows dependency injection from main server)
+
 	// Register default abilities
 	RegisterDefaultMeleeAbilities(cm.abilityRegistry)
 
 	return cm
+}
+
+// SetBroadcastCallback configures event broadcasting for animations
+func (cm *CombatManager) SetBroadcastCallback(sendFunc func(string, []byte)) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.eventBroadcaster = NewEventBroadcaster(sendFunc)
 }
 
 // RegisterEntity adds an entity to combat tracking
@@ -268,35 +281,40 @@ func (cm *CombatManager) GetEntityCount() int {
 
 // CombatEvent represents a combat event to broadcast
 type CombatEvent struct {
-	Type      CombatEventType
-	EventID   string
-	Timestamp time.Time
+	Type      CombatEventType `json:"type"`
+	EventID   string          `json:"event_id"`
+	Timestamp time.Time       `json:"timestamp"`
 
 	// Participants
-	CasterID string
-	TargetID string
+	CasterID string `json:"caster_id"`
+	TargetID string `json:"target_id"`
 
 	// Location
-	Position Vector3
+	Position  Vector3 `json:"position"`
+	Direction Vector3 `json:"direction,omitempty"`
 
 	// Combat Data
-	AbilityID string
-	Damage    int
-	Healing   int
+	AbilityID  string `json:"ability_id,omitempty"`
+	Damage     int    `json:"damage"`
+	Healing    int    `json:"healing,omitempty"`
+	DamageType string `json:"damage_type,omitempty"`
 
 	// Result
-	TargetHealth    int
-	TargetMaxHealth int
-	TargetDied      bool
+	TargetHealth    int  `json:"target_health"`
+	TargetMaxHealth int  `json:"target_max_health"`
+	TargetDied      bool `json:"target_died"`
 
 	// Effects
-	BuffsApplied   []string
-	DebuffsApplied []string
+	BuffsApplied   []string `json:"buffs_applied,omitempty"`
+	DebuffsApplied []string `json:"debuffs_applied,omitempty"`
 
 	// Metadata
-	IsCritical bool
-	WasDodged  bool
-	WasBlocked bool
+	IsCritical bool `json:"is_critical"`
+	WasDodged  bool `json:"was_dodged"`
+	WasBlocked bool `json:"was_blocked"`
+
+	// Animation Hints (for client)
+	AnimationHint string `json:"animation_hint,omitempty"` // "swing_right", "thrust", "overhead"
 }
 
 // CombatEventType represents types of combat events
