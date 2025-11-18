@@ -1,5 +1,10 @@
 extends CharacterBody3D
 
+## Monster entity that implements ITargetable interface
+##
+## Monsters can be targeted and attacked by players.
+## Implements the ITargetable contract via duck typing.
+
 # Entity ID for combat system
 @export var entity_id: String = ""
 @export var monster_name: String = "Monster"
@@ -14,6 +19,9 @@ var max_health: int = 100
 
 # Network state
 var last_position: Vector3 = Vector3.ZERO
+
+# State
+var is_dead: bool = false
 
 func _ready():
 	# Register with combat system
@@ -105,3 +113,35 @@ func play_death():
 	# Don't queue_free() - let the multiplayer_controller handle cleanup
 	# Just hide it
 	visible = false
+	is_dead = true
+
+# ============================================================================
+# ITARGETABLE INTERFACE IMPLEMENTATION
+# ============================================================================
+
+func get_entity_id() -> String:
+	return entity_id
+
+func is_valid_target() -> bool:
+	return not is_dead and visible
+
+func get_target_position() -> Vector3:
+	return global_position
+
+func get_display_name() -> String:
+	return monster_name
+
+func get_current_health() -> int:
+	return current_health
+
+func get_max_health() -> int:
+	return max_health
+
+func is_alive() -> bool:
+	return not is_dead and current_health > 0
+
+func get_faction() -> String:
+	return "monster"
+
+func get_visual_node() -> Node3D:
+	return self

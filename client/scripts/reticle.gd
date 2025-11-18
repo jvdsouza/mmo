@@ -13,8 +13,9 @@ extends Control
 var current_color: Color = default_color
 var has_target: bool = false
 
-# Reference to player (set externally)
+# References to combat systems (set externally)
 var player: Node3D = null
+var targeting_system: Node = null  # RaycastTargeting instance
 
 func _ready():
 	# Make sure we're centered and cover full screen
@@ -22,13 +23,19 @@ func _ready():
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # Don't block mouse events
 
 func _process(_delta):
-	# Update color based on player's current target
-	if player and player.has_method("get") and player.get("current_target"):
-		var target = player.current_target
-		if target:
+	# Update color based on targeting system
+	if targeting_system and targeting_system.has_valid_target():
+		var target = targeting_system.get_current_target()
+
+		if target and player:
+			# Get weapon from player to check attack range
+			var weapon = player.get("weapon")
+			var attack_range = weapon.attack_range if weapon else 3.0
+
 			# Check if in range
-			var distance = player.global_position.distance_to(target.global_position)
-			if distance <= player.attack_range:
+			var distance = player.global_position.distance_to(target.get_target_position())
+
+			if distance <= attack_range:
 				current_color = target_color  # In range, can attack
 				has_target = true
 			else:
