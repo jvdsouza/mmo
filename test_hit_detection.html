@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hit Detection Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #00ff00;
+            border-radius: 5px;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff0000; }
+        .info { color: #00aaff; }
+        button {
+            background: #00ff00;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #00cc00; }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #333;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #00ff00;
+            padding-left: 10px;
+        }
+        .combat-event {
+            border-left-color: #ff0000;
+            background: #1a0000;
+        }
+        .world-state {
+            border-left-color: #00aaff;
+            background: #001a1a;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Hit Detection System Test</h1>
+
+    <div class="section">
+        <h2>Connection Status</h2>
+        <div id="status">Disconnected</div>
+        <div id="playerId"></div>
+    </div>
+
+    <div class="section">
+        <h2>Monsters Available</h2>
+        <div id="monsterList">Waiting for world state...</div>
+    </div>
+
+    <div class="section">
+        <h2>Actions</h2>
+        <button onclick="attackFirstMonster()">Attack First Monster</button>
+        <button onclick="attackAllMonsters()">Attack All Monsters (spam test)</button>
+        <button onclick="moveNearMonster()">Move Near Monster</button>
+    </div>
+
+    <div class="section">
+        <h2>Test Results</h2>
+        <div id="results"></div>
+    </div>
+
+    <div class="section">
+        <h2>Messages</h2>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let playerId = null;
+        let monsters = [];
+        let testResults = {
+            connected: false,
+            monstersReceived: false,
+            attackSent: false,
+            damageEventReceived: false
+        };
+
+        function connect() {
+            ws = new WebSocket('ws://localhost:8080/ws');
+
+            ws.onopen = () => {
+                addMessage('✅ Connected to server', 'success');
+                testResults.connected = true;
+                updateResults();
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+
+            ws.onerror = (error) => {
+                addMessage('❌ Connection error: ' + error, 'error');
+            };
+
+            ws.onclose = () => {
+                addMessage('Connection closed', 'info');
+                document.getElementById('status').innerHTML = '<span class="error">Disconnected</span>';
+            };
+        }
+
+        function handleMessage(msg) {
+            switch(msg.type) {
+                case 'welcome':
+                    playerId = msg.data.player_id;
+                    document.getElementById('status').innerHTML = '<span class="success">Connected</span>';
+                    document.getElementById('playerId').innerHTML = 'Player ID: ' + playerId;
+                    addMessage('👋 Welcome! Player ID: ' + playerId, 'success');
+                    break;
+
+                case 'world_state':
+                    monsters = msg.data.monsters || [];
+                    updateMonsterList();
+                    if (monsters.length > 0 && !testResults.monstersReceived) {
+                        testResults.monstersReceived = true;
+                        updateResults();
+                        addMessage('🎮 Received ' + monsters.length + ' monsters', 'success', 'world-state');
+                    }
+                    break;
+
+                case 'combat_event':
+                    handleCombatEvent(msg.data);
+                    break;
+
+                case 'combat_events_batch':
+                    msg.data.events.forEach(event => handleCombatEvent(event));
+                    break;
+            }
+        }
+
+        function handleCombatEvent(event) {
+            const eventTypes = ['DAMAGE', 'HEAL', 'BUFF', 'DEBUFF', 'DEATH'];
+            const eventType = eventTypes[event.type] || 'UNKNOWN';
+
+            addMessage(
+                `⚔️ ${eventType}: ${event.attacker_id} → ${event.target_id} ` +
+                `(${event.damage || 0} damage, HP: ${event.target_health})` +
+                (event.is_critical ? ' 💥 CRIT!' : ''),
+                'info',
+                'combat-event'
+            );
+
+            if (event.type === 0) { // Damage event
+                testResults.damageEventReceived = true;
+                updateResults();
+            }
+
+            if (event.type === 4) { // Death event
+                addMessage(`💀 ${event.target_id} has died!`, 'success', 'combat-event');
+            }
+        }
+
+        function updateMonsterList() {
+            const list = document.getElementById('monsterList');
+            if (monsters.length === 0) {
+                list.innerHTML = 'No monsters found';
+                return;
+            }
+
+            list.innerHTML = monsters.map(m =>
+                `<div style="margin: 5px 0;">
+                    🧟 <strong>${m.id}</strong> (${m.name}) -
+                    HP: ${m.health}/${m.max_health} -
+                    Pos: (${m.position.x.toFixed(1)}, ${m.position.z.toFixed(1)})
+                </div>`
+            ).join('');
+        }
+
+        function updateResults() {
+            const results = document.getElementById('results');
+            results.innerHTML = `
+                <div>${testResults.connected ? '✅' : '❌'} Server Connection</div>
+                <div>${testResults.monstersReceived ? '✅' : '❌'} Monsters Received (${monsters.length})</div>
+                <div>${testResults.attackSent ? '✅' : '❌'} Attack Sent</div>
+                <div>${testResults.damageEventReceived ? '✅' : '❌'} Damage Event Received</div>
+                <div style="margin-top: 10px; font-weight: bold;">
+                    ${Object.values(testResults).every(r => r) ?
+                        '<span class="success">🎉 ALL TESTS PASSED!</span>' :
+                        '<span class="info">⏳ Testing in progress...</span>'}
+                </div>
+            `;
+        }
+
+        function attackFirstMonster() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('❌ Not connected to server', 'error');
+                return;
+            }
+
+            if (monsters.length === 0) {
+                addMessage('❌ No monsters available to attack', 'error');
+                return;
+            }
+
+            const target = monsters[0];
+            sendAttack(target.id);
+            testResults.attackSent = true;
+            updateResults();
+        }
+
+        function attackAllMonsters() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('❌ Not connected to server', 'error');
+                return;
+            }
+
+            if (monsters.length === 0) {
+                addMessage('❌ No monsters available', 'error');
+                return;
+            }
+
+            addMessage(`🔥 Attacking all ${monsters.length} monsters...`, 'info');
+            monsters.forEach(monster => {
+                sendAttack(monster.id);
+            });
+            testResults.attackSent = true;
+            updateResults();
+        }
+
+        function sendAttack(targetId) {
+            const message = {
+                type: 'attack',
+                player_id: playerId,
+                data: {
+                    target_id: targetId,
+                    ability_id: 'basic_attack'
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage('→ Attack sent to: ' + targetId, 'info');
+        }
+
+        function moveNearMonster() {
+            if (!ws || ws.readyState !== WebSocket.OPEN || monsters.length === 0) {
+                addMessage('❌ Cannot move: not connected or no monsters', 'error');
+                return;
+            }
+
+            const target = monsters[0];
+            const message = {
+                type: 'move',
+                player_id: playerId,
+                data: {
+                    position: {
+                        x: target.position.x + 2,
+                        y: 0,
+                        z: target.position.z + 2
+                    },
+                    rotation: { x: 0, y: 0, z: 0 }
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage(`→ Moved near ${target.id}`, 'info');
+        }
+
+        function addMessage(text, type = 'info', cssClass = '') {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message ' + cssClass;
+            div.innerHTML = `<span class="${type}">[${new Date().toLocaleTimeString()}]</span> ${text}`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Auto-connect on load
+        window.onload = () => {
+            addMessage('🚀 Starting hit detection test...', 'info');
+            updateResults();
+            connect();
+        };
+    </script>
+</body>
+</html>
