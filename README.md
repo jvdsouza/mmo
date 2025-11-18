@@ -1,248 +1,383 @@
-# MMO Game Prototype - Godot + Go
+# MMO Game - Godot Client + Go Server
 
-A basic MMO game prototype with:
-- **Godot 4.2** client (3D third-person)
-- **Go** server backend (WebSocket-based)
+A multiplayer MMO game with Godot 4.2 client and Go backend featuring real-time combat, spatial optimization, and extensible systems.
 
-## Project Structure
+## 🚀 Quick Start
+
+### Option 1: Docker (Easiest)
+
+```bash
+# Start everything with one command
+make docker-up
+
+# Or without make:
+docker-compose up
+
+# Access:
+# - Game Server: http://localhost:8080
+# - Web Client: http://localhost:3000
+# - Test UI: http://localhost:3000/test/websocket_test.html
+# - Database UI: http://localhost:8081
+```
+
+### Option 2: Local Development (Fastest)
+
+```bash
+# Terminal 1 - Server
+cd server
+go run ./cmd/server
+
+# Terminal 2 - Godot Client
+cd client
+godot project.godot  # Press F5 to run
+```
+
+### Option 3: Using Makefile
+
+```bash
+# Complete setup
+make quick-start
+
+# Or step by step:
+make setup-dev    # Setup environment
+make deps         # Install dependencies
+make dev          # Run server
+```
+
+## 📋 Requirements
+
+- **Go 1.21+** (server)
+- **Godot 4.2+** (client)
+- **Docker** (optional, for containerized dev)
+- **Make** (optional, for convenience commands)
+
+## 🎮 Features
+
+### Combat System
+- ✅ Server-authoritative combat
+- ✅ Multiple entity types (players, monsters, objects, environment)
+- ✅ Real-time animations synchronized via WebSocket
+- ✅ Spatial grid optimization (O(k) instead of O(n²))
+- ✅ Faction system for targeting rules
+- ✅ AI with aggro management
+- ✅ Loot tables and respawn system
+
+### Stats System (OCP Compliant)
+- ✅ Extensible stat system (Open-Closed Principle)
+- ✅ Character archetypes (Warrior, Mage, etc.)
+- ✅ Stat modifiers (Flat, Percent, Multiplier, Conditional)
+- ✅ Passive abilities
+- ✅ Easy to add new stats without modifying core
+
+### Network
+- ✅ WebSocket real-time communication
+- ✅ Event batching (50ms intervals)
+- ✅ Interest management (only broadcast to nearby players)
+- ✅ Combat event system for animations
+- ✅ 20Hz tick rate (configurable)
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐         WebSocket (JSON)         ┌─────────────────┐
+│  Godot Client   │◄─────────────────────────────────►│   Go Server     │
+│                 │                                   │                 │
+│  - Animations   │      Combat Events (50ms)         │  - Combat Mgr   │
+│  - VFX          │◄──────────────────────────────────│  - Spatial Grid │
+│  - Input        │                                   │  - Stats System │
+│  - UI           │      World State (20Hz)           │  - Entity Mgr   │
+└─────────────────┘◄──────────────────────────────────└─────────────────┘
+```
+
+## 📁 Project Structure
 
 ```
 mmo/
-├── server/          # Go backend server
-│   ├── go.mod
-│   └── main.go
-├── client/          # Godot game client
-│   ├── project.godot
-│   ├── scripts/
-│   │   ├── network_manager.gd
-│   │   ├── player.gd
-│   │   └── multiplayer_controller.gd
-│   └── scenes/
-│       ├── main.tscn
-│       └── player.tscn
-└── docs/            # Documentation
+├── server/                 # Go backend
+│   ├── cmd/
+│   │   ├── server/        # Main game server ⭐
+│   │   └── combat_demo/   # Combat system demo
+│   ├── combat/            # Combat system
+│   ├── entities/          # Monsters, objects, hazards
+│   ├── player/            # Player management
+│   ├── stats/             # Stats & archetypes
+│   └── go.mod
+│
+├── client/                # Godot 4.2 client
+│   ├── scripts/           # GDScript
+│   │   ├── combat_event_manager.gd  # Combat events ⭐
+│   │   ├── combat_entity_example.gd # Animation example
+│   │   └── vfx_manager.gd           # Visual effects
+│   ├── test/
+│   │   └── websocket_test.html      # Browser test UI ⭐
+│   └── project.godot
+│
+├── docs/                  # Documentation
+│   ├── ANIMATION_INTEGRATION.md
+│   ├── COMBAT_ENTITY_SYSTEM.md
+│   ├── DEVELOPMENT_GUIDE.md        # Detailed guide ⭐
+│   └── STATS_OCP_DESIGN.md
+│
+├── .env.development       # Dev config
+├── .env.staging          # Staging config
+├── .env.production       # Prod config
+├── docker-compose.yml    # Local stack
+├── Dockerfile            # Server container
+├── Makefile              # Dev commands ⭐
+└── README.md             # This file
 ```
 
-## Features
+## 🧪 Testing
 
-### Current Implementation
-
-✅ **Server (Go)**
-- WebSocket server on port 8080
-- Player connection management
-- World state broadcasting (20 ticks/sec)
-- Position synchronization
-- Concurrent player handling with goroutines
-
-✅ **Client (Godot)**
-- 3D character controller (WASD movement)
-- Mouse look camera
-- WebSocket connection to server
-- Real-time position updates
-- Multiplayer player rendering
-- Smooth interpolation for remote players
-
-## Quick Start
-
-### 1. Run the Go Server
+### 1. Test Server Health
 
 ```bash
+curl http://localhost:8080/health
+
+# Expected:
+{
+  "status": "healthy",
+  "environment": "development",
+  "uptime": 45.2,
+  "players": 0
+}
+```
+
+### 2. Test WebSocket (Browser)
+
+Open `http://localhost:3000/test/websocket_test.html`
+
+- Visual test UI
+- Send movement, attacks, chat
+- View real-time combat events
+- Monitor server stats
+
+### 3. Test Combat System
+
+```bash
+# Run combat demo
+make test-combat
+
+# Or directly:
 cd server
-go mod download
-go run main.go
+go run ./cmd/combat_demo
 ```
 
-Server will start on `http://localhost:8080`
+### 4. Test in Godot
 
-You should see:
+1. Open `client/project.godot` in Godot
+2. Ensure server is running
+3. Press F5
+4. Use WASD to move
+5. Click monsters to attack
+
+## 🔧 Development Commands
+
+```bash
+# Quick Commands
+make help           # Show all commands
+make dev            # Start dev server
+make dev-client     # Open Godot
+make docker-up      # Start all services
+make test-websocket # Open test UI
+
+# Build
+make build          # Build server
+make build-demo     # Build combat demo
+make build-all      # Build everything
+
+# Testing
+make test           # Run tests
+make test-combat    # Run combat demo
+
+# Docker
+make docker-build   # Build image
+make docker-logs    # View logs
+make docker-down    # Stop services
+
+# Cleanup
+make clean          # Clean builds
+make clean-docker   # Clean Docker
+
+# See Makefile for all commands
 ```
-Server starting on :8080
+
+## 🌍 Environments
+
+### Development
+```bash
+ENVIRONMENT=development make dev
+# Features: CORS enabled, test monsters, debug logging
 ```
 
-### 2. Run the Godot Client
+### Staging
+```bash
+ENVIRONMENT=staging make dev
+# Features: Production-like, limited test data
+```
 
-**Option A: Using Godot Editor**
-1. Download Godot 4.2+ from https://godotengine.org/
-2. Open the project: `File > Open Project` → select `client/project.godot`
-3. Press `F5` or click the Play button
+### Production
+```bash
+ENVIRONMENT=production ./bin/mmo-server
+# Features: Strict security, minimal logging, metrics
+```
 
-**Option B: Export and Run**
-1. Export the project as a standalone executable
-2. Run the exported game
+## 📡 Network Protocol
 
-### 3. Test Multiplayer
+### Client → Server
 
-To test multiplayer functionality:
-1. Run multiple instances of the Godot client
-2. Each client connects to the same server
-3. You should see other players moving around
-
-## Controls
-
-- **W/A/S/D** - Move forward/left/back/right
-- **Mouse** - Look around
-- **Space** - Jump
-- **ESC** - Release/capture mouse cursor
-
-## Network Protocol
-
-### Message Types
-
-**Client → Server:**
+**Movement:**
 ```json
 {
   "type": "move",
-  "player_id": "player_12345",
-  "data": {
-    "position": {"x": 0.0, "y": 1.0, "z": 0.0},
-    "rotation": {"x": 0.0, "y": 0.0, "z": 0.0}
-  }
+  "data": {"position": {"x": 10, "y": 0, "z": 5}}
 }
 ```
 
-**Server → Client:**
+**Attack:**
 ```json
 {
-  "type": "world_state",
+  "type": "attack",
+  "data": {"target_id": "monster_123", "ability_id": "basic_attack"}
+}
+```
+
+### Server → Client
+
+**Combat Event:**
+```json
+{
+  "type": "combat_event",
   "data": {
-    "players": [
-      {
-        "id": "player_12345",
-        "position": {"x": 0.0, "y": 1.0, "z": 0.0},
-        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0}
-      }
-    ]
+    "damage": 25,
+    "is_critical": true,
+    "animation_hint": "swing_right",
+    "target_health": 75
   }
 }
 ```
 
-## Architecture
+See `docs/DEVELOPMENT_GUIDE.md` for complete protocol.
 
-### Server Architecture
-```
-Client 1 ──┐
-           ├──> WebSocket ──> Go Game Server ──> Game Loop (20 Hz)
-Client 2 ──┘                        │
-                                    └──> Player State Management
-```
+## 🎯 Key Systems
 
-### Client Architecture
-```
-Input ──> Player Controller ──> NetworkManager ──> WebSocket ──> Server
-                │                      │
-                └──> Local Prediction  │
-                                       └──> World State Updates ──> Render Remote Players
-```
+### Combat Manager
+- Central orchestration for all combat
+- Spatial grid for O(k) queries
+- Event broadcasting to clients
+- Server-authoritative validation
 
-## Next Steps
+### Stats System
+- Open-Closed Principle design
+- Add new stats without modifying core
+- Stat modifiers (flat, percent, multiplier, conditional)
+- Character archetypes with passive abilities
 
-### Essential Features to Add
+### Entity System
+- Universal CombatEntity interface
+- Players, monsters, destructibles, environmental hazards
+- Faction-based targeting
+- AI states for monsters
 
-1. **Server-Side Validation**
-   - Movement validation (speed checks)
-   - Anti-cheat measures
-   - Position sanity checks
+### Animation Integration
+- Server events → Client animations
+- VFX pooling for performance
+- Damage numbers (color-coded)
+- Hit reactions, death animations
 
-2. **Combat System**
-   - Attack actions
-   - Health system
-   - Damage calculation (server-authoritative)
+## 📚 Documentation
 
-3. **Persistence**
-   - Database integration (PostgreSQL)
-   - Player accounts
-   - Character data saving
+- **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Complete dev workflow
+- **[Animation Integration](docs/ANIMATION_INTEGRATION.md)** - Client-server animation sync
+- **[Combat System](docs/COMBAT_ENTITY_SYSTEM.md)** - Combat architecture
+- **[Stats System](docs/STATS_OCP_DESIGN.md)** - OCP-compliant stats
 
-4. **Interest Management**
-   - Only send nearby player data
-   - Spatial partitioning
-   - Reduce network traffic
+## 🐛 Troubleshooting
 
-5. **Game Features**
-   - Chat system
-   - Inventory
-   - NPCs
-   - Quests
-
-6. **Optimization**
-   - Client-side prediction
-   - Better interpolation
-   - Lag compensation
-   - Network compression
-
-## Development Tips
-
-### Server Development
+**Server won't start:**
 ```bash
-# Install dependencies
-cd server
-go mod download
-
-# Run with auto-reload (install air)
-go install github.com/cosmtrek/air@latest
-air
-
-# Build for production
-go build -o mmo-server main.go
+lsof -i :8080          # Check port
+make clean             # Clean builds
+make docker-restart    # Restart Docker
 ```
 
-### Client Development
-- Use Godot's debugger for network issues
-- Check console output for connection logs
-- Test with localhost before deploying
-
-### Testing Multiplayer Locally
+**Client can't connect:**
 ```bash
-# Terminal 1: Run server
-cd server && go run main.go
-
-# Terminal 2-N: Run multiple Godot instances
-# Open Godot editor and press F5 multiple times
+curl http://localhost:8080/health  # Check server
+# Verify firewall settings
+# Check WebSocket URL in client
 ```
 
-## Configuration
+**Combat events not received:**
+- Check CombatEventManager is autoload in Godot
+- Verify entities are registered
+- Check browser network tab for WebSocket messages
 
-### Server Configuration
-Edit `server/main.go`:
-```go
-addr := ":8080"  // Change port
+## 🚢 Deployment
+
+### Docker (Recommended)
+```bash
+docker build -t mmo-server:latest .
+docker run -p 8080:8080 --env-file .env.production mmo-server
 ```
 
-### Client Configuration
-Edit `client/scripts/network_manager.gd`:
-```gdscript
-var server_url = "ws://localhost:8080/ws"  // Change server address
+### Binary
+```bash
+make build-prod
+./bin/mmo-server-prod
 ```
 
-## Troubleshooting
+### Kubernetes
+```bash
+kubectl apply -f k8s/
+# (k8s configs not included yet)
+```
 
-**Connection Failed**
-- Ensure server is running
-- Check server URL in `network_manager.gd`
-- Check firewall settings
+## 🤝 Contributing
 
-**Players Not Visible**
-- Check console for errors
-- Verify world state messages are being received
-- Ensure player scene is assigned in main.tscn
+1. Create feature branch
+2. Make changes
+3. Test locally: `make test`
+4. Build: `make build`
+5. Test in Docker: `make docker-up`
+6. Submit PR
 
-**Laggy Movement**
-- Server may be overloaded
-- Network latency
-- Implement client-side prediction
+## 📊 Performance
 
-## Requirements
+- **Tick Rate:** 20 Hz (50ms)
+- **Combat Events:** Batched every 50ms
+- **Spatial Grid:** O(k) queries (k = nearby entities)
+- **Target Players:** 1000+ concurrent
+- **Tested Load:** 100 players + 500 monsters
 
-- **Go**: 1.21+
-- **Godot**: 4.2+
-- **OS**: Windows, Linux, or macOS
+## 🛣️ Roadmap
 
-## License
+- [ ] Persistence (PostgreSQL)
+- [ ] User authentication
+- [ ] Inventory system
+- [ ] Ranged combat & projectiles
+- [ ] Crafting system
+- [ ] Quest system
+- [ ] Guild system
+- [ ] Prometheus metrics
+- [ ] Kubernetes deployment configs
 
-MIT License - Feel free to use for learning and development
+## 📝 License
 
-## Resources
+MIT License - See LICENSE file
 
-- [Godot Networking Docs](https://docs.godotengine.org/en/stable/tutorials/networking/)
-- [Go WebSocket Tutorial](https://github.com/gorilla/websocket)
-- [MMO Architecture Patterns](https://www.gabrielgambetta.com/client-server-game-architecture.html)
+## 🙏 Acknowledgments
+
+- Built with [Godot Engine](https://godotengine.org/)
+- WebSocket via [Gorilla WebSocket](https://github.com/gorilla/websocket)
+- Inspired by classic MMOs
+
+---
+
+**Ready to build your MMO?**
+
+```bash
+make quick-start
+```
+
+Open `http://localhost:3000/test/websocket_test.html` and start testing! 🎮

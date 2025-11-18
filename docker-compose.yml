@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # Game Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=development
+      - PORT=8080
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+    env_file:
+      - .env.development
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./server:/app
+    restart: unless-stopped
+    networks:
+      - mmo-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: mmo_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - mmo-network
+
+  # Redis for sessions/cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - mmo-network
+
+  # Godot Client (development server)
+  client:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./client:/usr/share/nginx/html:ro
+    networks:
+      - mmo-network
+
+  # Adminer (database UI)
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    networks:
+      - mmo-network
+
+networks:
+  mmo-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

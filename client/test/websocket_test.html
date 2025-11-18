@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMO WebSocket Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 15px;
+        }
+
+        h1 {
+            color: #569cd6;
+            margin-top: 0;
+        }
+
+        h2 {
+            color: #4ec9b0;
+            font-size: 18px;
+            margin-top: 0;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .status.connected {
+            background: #107c10;
+            color: white;
+        }
+
+        .status.disconnected {
+            background: #c50f1f;
+            color: white;
+        }
+
+        .status.connecting {
+            background: #ca5010;
+            color: white;
+        }
+
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #1177bb;
+        }
+
+        button:active {
+            background: #005a9e;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            background: #3c3c3c;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-family: 'Consolas', monospace;
+        }
+
+        .messages {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #0e639c;
+            background: #252526;
+        }
+
+        .message.sent {
+            border-left-color: #4ec9b0;
+        }
+
+        .message.received {
+            border-left-color: #569cd6;
+        }
+
+        .message.combat {
+            border-left-color: #c586c0;
+        }
+
+        .message .timestamp {
+            color: #858585;
+            font-size: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat {
+            background: #3c3c3c;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ec9b0;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #858585;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 MMO WebSocket Test Client</h1>
+
+    <div class="status" id="status">Disconnected</div>
+
+    <div class="container">
+        <!-- Left Panel -->
+        <div class="panel">
+            <h2>Connection</h2>
+            <input type="text" id="serverUrl" value="ws://localhost:8080/ws" placeholder="Server URL">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+
+            <h2>Player Info</h2>
+            <div id="playerInfo">Not connected</div>
+
+            <h2>Quick Actions</h2>
+            <div>
+                <button onclick="sendMove()">Move Random</button>
+                <button onclick="sendAttack()">Attack Monster</button>
+                <button onclick="sendChat()">Send Chat</button>
+            </div>
+
+            <h2>Custom Message</h2>
+            <textarea id="customMessage" rows="4" placeholder='{"type": "move", "data": {"position": {"x": 10, "y": 0, "z": 5}}}'></textarea>
+            <button onclick="sendCustom()">Send Custom</button>
+
+            <h2>Server Stats</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value" id="playerCount">0</div>
+                    <div class="stat-label">Players</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="monsterCount">0</div>
+                    <div class="stat-label">Monsters</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="messageCount">0</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="panel">
+            <h2>Messages</h2>
+            <button onclick="clearMessages()">Clear</button>
+            <button onclick="toggleFilter('combat')">Toggle Combat</button>
+            <div class="messages" id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let playerId = null;
+        let messageCount = 0;
+        let playerCount = 0;
+        let monsterCount = 0;
+        let showCombat = true;
+
+        function updateStatus(text, className) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = 'status ' + className;
+        }
+
+        function connect() {
+            const url = document.getElementById('serverUrl').value;
+            updateStatus('Connecting...', 'connecting');
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                updateStatus('Connected', 'connected');
+                addMessage('System', 'Connected to server', 'received');
+            };
+
+            ws.onclose = () => {
+                updateStatus('Disconnected', 'disconnected');
+                addMessage('System', 'Disconnected from server', 'received');
+            };
+
+            ws.onerror = (error) => {
+                updateStatus('Error', 'disconnected');
+                addMessage('System', 'WebSocket error', 'received');
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                handleMessage(event.data);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function handleMessage(data) {
+            const msg = JSON.parse(data);
+            messageCount++;
+            document.getElementById('messageCount').textContent = messageCount;
+
+            switch (msg.type) {
+                case 'welcome':
+                    playerId = msg.data.player_id;
+                    document.getElementById('playerInfo').innerHTML = `
+                        <strong>Player ID:</strong> ${playerId}<br>
+                        <strong>Server Time:</strong> ${msg.data.server_time}<br>
+                        <strong>Tick Rate:</strong> ${msg.data.tick_rate}
+                    `;
+                    addMessage('Welcome', JSON.stringify(msg.data, null, 2), 'received');
+                    break;
+
+                case 'world_state':
+                    playerCount = msg.data.players.length;
+                    monsterCount = msg.data.monsters.length;
+                    document.getElementById('playerCount').textContent = playerCount;
+                    document.getElementById('monsterCount').textContent = monsterCount;
+                    // Don't log every world state (too spammy)
+                    break;
+
+                case 'combat_event':
+                    if (showCombat) {
+                        addMessage('Combat Event', JSON.stringify(msg.data, null, 2), 'combat');
+                    }
+                    break;
+
+                case 'combat_events_batch':
+                    if (showCombat) {
+                        msg.data.events.forEach(event => {
+                            addMessage('Combat Batch', JSON.stringify(event, null, 2), 'combat');
+                        });
+                    }
+                    break;
+
+                case 'chat':
+                    addMessage(msg.data.player_name, msg.data.message, 'received');
+                    break;
+
+                case 'error':
+                    addMessage('Error', msg.data.message, 'received');
+                    break;
+
+                default:
+                    addMessage('Unknown', JSON.stringify(msg, null, 2), 'received');
+            }
+        }
+
+        function addMessage(type, content, className) {
+            const messages = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+
+            const div = document.createElement('div');
+            div.className = 'message ' + className;
+            div.innerHTML = `
+                <div class="timestamp">${timestamp} - ${type}</div>
+                <pre>${content}</pre>
+            `;
+
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function sendMessage(msg) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected to server');
+                return;
+            }
+
+            const data = JSON.stringify(msg);
+            ws.send(data);
+            addMessage('Sent', data, 'sent');
+        }
+
+        function sendMove() {
+            sendMessage({
+                type: 'move',
+                data: {
+                    position: {
+                        x: Math.random() * 100 - 50,
+                        y: 0,
+                        z: Math.random() * 100 - 50
+                    }
+                }
+            });
+        }
+
+        function sendAttack() {
+            sendMessage({
+                type: 'attack',
+                data: {
+                    target_id: 'monster_1', // Assuming test monster exists
+                    ability_id: 'basic_attack'
+                }
+            });
+        }
+
+        function sendChat() {
+            const message = prompt('Enter chat message:');
+            if (message) {
+                sendMessage({
+                    type: 'chat',
+                    data: {
+                        message: message
+                    }
+                });
+            }
+        }
+
+        function sendCustom() {
+            const customMsg = document.getElementById('customMessage').value;
+            try {
+                const msg = JSON.parse(customMsg);
+                sendMessage(msg);
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        function toggleFilter(type) {
+            if (type === 'combat') {
+                showCombat = !showCombat;
+            }
+        }
+
+        // Auto-connect on load in development
+        if (window.location.hostname === 'localhost') {
+            setTimeout(connect, 500);
+        }
+    </script>
+</body>
+</html>
